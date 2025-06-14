@@ -1,156 +1,147 @@
-
 import tkinter as tk     
 import random
+import string
 
-
-docs = '''\n
-\nClick 'Start' or press 'Enter' if you are ready to start the test.'''
-
+docs = '''\nClick 'Start' or press 'Enter' if you are ready to start the test.'''
 title = 'Digit Span Test for Memory Evaluation'
 
+def startTest(mode):
+    def runTest(*args):
+        global i, DIGITS, FAILURES
+        wdw.unbind('<Return>')
+        canvas.delete('all')
 
-def startTest(*args):
-    nums = ['Three','Four','Five','Six','Seven','Eight', 'Nine','Ten','Eleven',
-            'Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen']
-    wdw.unbind('<Return>')
-    canvas.delete('all')
-    while True:
-        global i, DIGITS
+        nums = ['Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven',
+                'Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen']
+
         DIGITS += 1
         i += 1
-        counter = i-1
-        txt = '{0}-Digit Sequence'.format(nums[i-1])
+        counter = i - 1
+
+        # Reverse logic from level 5 onward for every alternate level
+        reverse_required = DIGITS >= 5 and (DIGITS % 2 == 1)
+
+        txt = '{0}-Character Sequence'.format(nums[i-1])
+        instruction = "Type the **REVERSED** sequence" if reverse_required else "Type the sequence normally"
+        
         seqtxt = canvas.create_text(Width/2, Height/3.5, fill='darkblue', 
-                                                         font='Arial 32', 
-                                                         text=txt, 
-                                                         justify='c')
+                                     font='Arial 32', text=txt, justify='c')
+        canvas.create_text(Width/2, Height/3, fill='red', font='Arial 24', text=instruction)
+
         canvas.after(1200, canvas.update())
-        seq = random.sample(range(10), DIGITS)
-        while consecutive(seq) == False:
+
+        # Sequence generation
+        if mode == 'number':
             seq = random.sample(range(10), DIGITS)
-      
-        seq = str(seq)
-        seq_digits = ''.join(c for c in seq if c.isdigit())
-        length = len(seq_digits)
-        for a in range(length):
+            while not isValidSequence(seq):
+                seq = random.sample(range(10), DIGITS)
+            seq_digits = ''.join(str(d) for d in seq)
+        else:
+            seq = random.sample(string.ascii_uppercase, DIGITS)
+            while not isValidSequenceAlpha(seq):
+                seq = random.sample(string.ascii_uppercase, DIGITS)
+            seq_digits = ''.join(seq)
+
+        # Show one by one
+        for a in range(len(seq_digits)):
             z = canvas.create_text(Width/2, Height/2, fill='darkblue', 
-                                                      font='Times 160', 
-                                                      text=seq_digits[a], 
-                                                      justify='c')
-            canvas.after(1000,canvas.update())
+                                   font='Times 160', text=seq_digits[a], justify='c')
+            canvas.after(1000, canvas.update())
             canvas.delete(z)        
-        
+
         label = canvas.create_text(Width/2, Height/2.3, fill='darkblue', 
-                                                        font='Arial 26', 
-                                                        text='Repeat the sequence here', 
-                                                        justify='c')
-        
-        entry = tk.Text(wdw, width=length, height=1, font=('Arial', 32))
+                                   font='Arial 26', text='Repeat the sequence here', justify='c')
+
+        entry = tk.Text(wdw, width=len(seq_digits), height=1, font=('Arial', 32))
         e = canvas.create_window(Width/2, Height/2, window=entry)
         entry.focus()
-        
+
         def delete():
             canvas.delete('all')
-            startTest()
-            
+            runTest()
+
         def get_text(event=None):
-            global userNumbers, generatedNumbers, FAILURES
-            content = entry.get(1.0, "end-1c")
+            global userNumbers, generatedNumbers, FAILURES, i, DIGITS
+            content = entry.get(1.0, "end-1c").upper().replace(" ", "")
+            expected = seq_digits[::-1] if reverse_required else seq_digits
             userNumbers.append(content)
-            generatedNumbers.append(seq_digits)
+            generatedNumbers.append(seq_digits if not reverse_required else seq_digits + " (reversed)")
+
             canvas.delete(label, b, e, seqtxt)
-            if content == seq_digits:
+            if content == expected:
                 canvas.create_text(Width/2, Height/2.3, fill='darkblue', 
-                                                        font='Arial 26', 
-                                                        text='Correct! Continue...', 
-                                                        justify='c')
+                                   font='Arial 26', text='Correct! Continue...', justify='c')
                 canvas.after(1200, delete)
             else:
                 canvas.create_text(Width/2, Height/2.3, fill='darkblue', 
-                                                        font='Arial 26', 
-                                                        text='Try again!', 
-                                                        justify='c')
+                                   font='Arial 26', text='Try again!', justify='c')
                 FAILURES += 1
                 if FAILURES < 3:
-                    global i, DIGITS
                     i -= 1
                     DIGITS -= 1
                     canvas.after(1200, delete)
                 else:
                     canvas.delete('all')
                     canvas.create_text(Width/2, Height/2.3, fill='darkblue', 
-                                                            font='Arial 26', 
-                                                            text='Thank you for your participation!', 
-                                                            justify='c')
-
+                                       font='Arial 26', text='Thank you for your participation!', justify='c')
                     canvas.create_text(Width/2, Height/2, fill='darkblue', 
-                                                          font='Arial 36', 
-                                                          text='Your score: {0}'.format(counter), 
-                                                          justify='c')
-
+                                       font='Arial 36', text='Your score: {0}'.format(counter), justify='c')
                     wdw.after(3000, lambda: wdw.destroy())
-                
+
         button2 = tk.Button(wdw, height=2, width=10, text='Continue', 
-                                                     font='Arial 20', 
-                                                     fg='black', 
-                                                     command=get_text, bd=0)
-        button2.configure(bg='#4682B4', 
-                          activebackground='#36648B', 
-                          activeforeground='white')
+                            font='Arial 20', fg='black', command=get_text, bd=0)
+        button2.configure(bg='#4682B4', activebackground='#36648B', activeforeground='white')
         entry.bind('<Return>', get_text)  
         b = canvas.create_window(Width/2, Height/1.6, window=button2)
-        break
-    
 
-def consecutive(sequence):
-    l = len(sequence)
-    res = []
-    for x in range(l-1):
-        if sequence[x] == sequence[x+1]+1 or sequence[x] == sequence[x+1]-1:
-            res.append(1)
-    if len(res) > 0:
-        return False
+    runTest()
 
+def isValidSequence(seq):
+    for x in range(len(seq)-1):
+        if abs(seq[x] - seq[x+1]) == 1:
+            return False
+    return True
 
+def isValidSequenceAlpha(seq):
+    for x in range(len(seq)-1):
+        if abs(ord(seq[x]) - ord(seq[x+1])) == 1:
+            return False
+    return True
+
+# Window setup
 wdw = tk.Tk()
 wdw.title('Digit Span Test')
 Width = wdw.winfo_screenwidth()
 Height = wdw.winfo_screenheight()
 wdw.geometry("%dx%d" % (Width, Height))
 canvas = tk.Canvas(wdw, bg='#FDF5E6')
-canvas.pack(fill = 'both', expand = True)
+canvas.pack(fill='both', expand=True)
 wdw.state('zoomed')
 
 canvas.create_text(Width/2, Height/4.5, fill='darkblue', 
-                                        font='Arial 52', 
-                                        text=title, 
-                                        justify='c')
-
+                   font='Arial 52', text=title, justify='c')
 canvas.create_text(Width/2, Height/2.2, fill='darkblue', 
-                                        font='Arial 36', 
-                                        text=docs, 
-                                        justify='c')
+                   font='Arial 36', text=docs, justify='c')
 
+# Variables
 i = 0
 DIGITS = 2
 FAILURES = 0
-
-wdw.bind('<Return>', lambda event: startTest())
 userNumbers, generatedNumbers = [], []
 
-button1 = tk.Button(wdw, height=2, width=8, text='Start', 
-                                            font='Arial 24', 
-                                            fg='black', 
-                                            command=startTest, 
-                                            bd=0)
+# Homepage buttons
+button_num = tk.Button(wdw, height=2, width=10, text='Numbers', 
+                       font='Arial 24', fg='black', command=lambda: startTest('number'), bd=0)
+button_num.configure(bg='#4682B4', activebackground='#36648B', activeforeground='white')
+canvas.create_window(Width/2 - 150, Height/1.4, window=button_num)
 
-button1.configure(bg='#4682B4', 
-                  activebackground='#36648B', 
-                  activeforeground='white')
-                  
-canvas.create_window(Width/2, Height/1.4, window=button1)
+button_alpha = tk.Button(wdw, height=2, width=10, text='Alphabets', 
+                         font='Arial 24', fg='black', command=lambda: startTest('alphabet'), bd=0)
+button_alpha.configure(bg='#4682B4', activebackground='#36648B', activeforeground='white')
+canvas.create_window(Width/2 + 150, Height/1.4, window=button_alpha)
 
 wdw.mainloop()
 
+# Print final results
 print('Generated: ', generatedNumbers)
 print('Repeated:  ', userNumbers)
