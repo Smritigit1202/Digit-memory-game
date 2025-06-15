@@ -1,18 +1,11 @@
-import tkinter as tk     
+import tkinter as tk
 import random
 import string
-import speech_recognition as sr  # <-- New Import
-from PIL import Image, ImageTk  # <-- For Avatar feature
+import speech_recognition as sr
+from PIL import Image, ImageTk
 import os
+import time
 
-# Load avatar image
-AVATAR_PATH = "avatar_happy.png"  # Make sure this image is in the same folder
-avatar_img = None
-if os.path.exists(AVATAR_PATH):
-    avatar_raw = Image.open(AVATAR_PATH).resize((150, 150))
-    avatar_img = ImageTk.PhotoImage(avatar_raw)
-
-# Motivational messages
 motivational_lines = [
     "You're doing great! Keep it up!",
     "Amazing memory power!",
@@ -24,30 +17,47 @@ motivational_lines = [
     "Brain training master in action!"
 ]
 
-docs = '''\nClick 'Start' or press 'Enter' if you are ready to start the test.'''
+docs = "\nClick 'Start' or press 'Enter' if you are ready to start the test."
 title = 'Digit Span Test for Memory Evaluation'
+
+sequence_store = {}
 
 def startTest(mode):
     def runTest(*args):
-        global i, DIGITS, FAILURES
+        global i, DIGITS, FAILURES, SCORE, paused, start_time, total_test_start_time
         wdw.unbind('<Return>')
         canvas.delete('all')
+
+        if total_test_start_time == 0:
+            total_test_start_time = time.time()
 
         nums = ['Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven',
                 'Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen']
 
-        DIGITS += 1
         i += 1
         counter = i - 1
 
+        if SCORE < 0:
+            i = 0
+            DIGITS = 2
+            FAILURES = 0
+            SCORE = 0
+            runTest()
+            return
+
+        DIGITS = max(3, ((SCORE // 5) + 1) * 1 + 2)
+
         reverse_required = DIGITS >= 5 and (DIGITS % 2 == 1)
 
-        txt = '{0}-Character Sequence'.format(nums[i-1])
+        txt = '{0}-Character Sequence'.format(nums[DIGITS-3])
         instruction = "Type the **REVERSED** sequence" if reverse_required else "Type the sequence normally"
 
         seqtxt = canvas.create_text(Width/2, Height/3.5, fill='darkblue', 
                                      font='Arial 32', text=txt, justify='c')
         canvas.create_text(Width/2, Height/3, fill='red', font='Arial 24', text=instruction)
+
+        score_text = canvas.create_text(Width - 150, 50, fill='darkgreen', 
+                                        font='Arial 20 bold', text=f'Score: {SCORE}', tags='score')
 
         canvas.after(1200, canvas.update())
 
@@ -62,58 +72,86 @@ def startTest(mode):
                 seq = random.sample(string.ascii_uppercase, DIGITS)
             seq_digits = ''.join(seq)
 
+        sequence_store['current'] = seq_digits
+        sequence_store['reverse'] = reverse_required
+
+        canvas.delete('all')
         for a in range(len(seq_digits)):
+            if paused:
+                return
             z = canvas.create_text(Width/2, Height/2, fill='darkblue', 
                                    font='Times 160', text=seq_digits[a], justify='c')
             canvas.after(1000, canvas.update())
-            canvas.delete(z)        
+            canvas.delete(z)
 
         label = canvas.create_text(Width/2, Height/2.3, fill='darkblue', 
                                    font='Arial 26', text='Repeat the sequence here', justify='c')
 
-        entry_width = max(5, min(25, len(seq_digits) + 2))
+        entry_width = max(3, len(seq_digits))
         entry = tk.Text(wdw, width=entry_width, height=1, font=('Arial', 32))
         e = canvas.create_window(Width/2, Height/2, window=entry)
         entry.focus()
+
+        start_time = time.time()
 
         def delete():
             canvas.delete('all')
             runTest()
 
-        def get_text(event=None):
-            global userNumbers, generatedNumbers, FAILURES, i, DIGITS
-            content = entry.get(1.0, "end-1c").upper().replace(" ", "")
-            expected = seq_digits[::-1] if reverse_required else seq_digits
-            userNumbers.append(content)
-            generatedNumbers.append(seq_digits if not reverse_required else seq_digits + " (reversed)")
+        def stop_game():
+            global userNumbers, generatedNumbers
+            total_time = time.time() - total_test_start_time
+            canvas.delete('all')
+            canvas.create_text(Width/2, Height/4, fill='darkblue', 
+                               font='Arial 36', text='Game Over. Here are your results:', justify='c')
+            canvas.create_text(Width/2, Height/2.8, fill='darkblue', 
+                               font='Arial 28', text=f'Total Score: {SCORE}', justify='c')
+            canvas.create_text(Width/2, Height/2.4, fill='darkgreen', 
+                               font='Arial 24', text=f'Entries: {len(userNumbers)} | Total Time: {int(total_time)} seconds', justify='c')
+            canvas.create_text(Width/2, Height/2, fill='blue', 
+                               font='Arial 20 italic', text=random.choice(motivational_lines), justify='c')
+            attention_level = 'High' if SCORE >= len(userNumbers) * 0.8 else 'Moderate' if SCORE >= len(userNumbers) * 0.5 else 'Needs Improvement'
+            canvas.create_text(Width/2, Height/1.8, fill='orange', 
+                               font='Arial 24', text=f'Attention Level: {attention_level}', justify='c')
 
-            canvas.delete(label, b, e, seqtxt, speak_button)
-            canvas.delete("avatar")
+        def get_text(event=None):
+            global userNumbers, generatedNumbers, FAILURES, i, DIGITS, SCORE
+            content = entry.get(1.0, "end-1c").upper().replace(" ", "")
+            expected = sequence_store['current'][::-1] if sequence_store['reverse'] else sequence_store['current']
+            userNumbers.append(content)
+            generatedNumbers.append(sequence_store['current'] if not sequence_store['reverse'] else sequence_store['current'] + " (reversed)")
+
+            canvas.delete("all")
 
             if content == expected:
+                SCORE += 1
                 canvas.create_text(Width/2, Height/2.3, fill='darkblue', 
                                    font='Arial 26', text='Correct! Continue...', justify='c')
-                if avatar_img:
-                    canvas.create_image(Width/2, Height/1.8, image=avatar_img, tags="avatar")
                 motivation = random.choice(motivational_lines)
                 canvas.create_text(Width/2, Height/1.6, fill='green', 
-                                   font='Arial 20 italic', text=motivation, tags="avatar")
+                                   font='Arial 20 italic', text=motivation)
                 canvas.after(1500, delete)
             else:
+                SCORE -= 2
                 canvas.create_text(Width/2, Height/2.3, fill='darkblue', 
                                    font='Arial 26', text='Try again!', justify='c')
                 FAILURES += 1
                 if FAILURES < 3:
                     i -= 1
-                    DIGITS -= 1
                     canvas.after(1200, delete)
                 else:
-                    canvas.delete('all')
-                    canvas.create_text(Width/2, Height/2.3, fill='darkblue', 
-                                       font='Arial 26', text='Thank you for your participation!', justify='c')
-                    canvas.create_text(Width/2, Height/2, fill='darkblue', 
-                                       font='Arial 36', text='Your score: {0}'.format(counter), justify='c')
-                    wdw.after(3000, lambda: wdw.destroy())
+                    stop_game()
+
+        def repeat_sequence():
+            global SCORE
+            SCORE -= 2
+            canvas.delete('all')
+            for a in range(len(sequence_store['current'])):
+                z = canvas.create_text(Width/2, Height/2, fill='darkblue', 
+                                       font='Times 160', text=sequence_store['current'][a], justify='c')
+                canvas.after(1000, canvas.update())
+                canvas.delete(z)
+            runTest()
 
         def recognize_speech():
             r = sr.Recognizer()
@@ -137,16 +175,41 @@ def startTest(mode):
                     canvas.create_text(Width/2, Height/1.8, fill='red', 
                                        font='Arial 20', text='Speech service failed.', tag='listen_msg')
 
-        button2 = tk.Button(wdw, height=2, width=10, text='Continue', 
-                            font='Arial 20', fg='black', command=get_text, bd=0)
-        button2.configure(bg='#4682B4', activebackground='#36648B', activeforeground='white')
-        entry.bind('<Return>', get_text)  
-        b = canvas.create_window(Width/2, Height/1.6, window=button2)
+        def toggle_pause():
+            global paused
+            paused = not paused
+            if paused:
+                canvas.create_text(Width/2, Height/1.1, fill='red', font='Arial 20 bold', text='Paused', tag='pause_msg')
+            else:
+                canvas.delete('pause_msg')
+                runTest()
+
+        entry.bind('<Return>', get_text)
+
+        button_continue = tk.Button(wdw, height=2, width=10, text='Continue', 
+                                    font='Arial 20', fg='black', command=get_text, bd=0)
+        button_continue.configure(bg='#4682B4', activebackground='#36648B', activeforeground='white')
+        canvas.create_window(Width/2, Height/1.6, window=button_continue)
 
         speak_btn = tk.Button(wdw, height=2, width=10, text='Speak',
                               font='Arial 20', fg='black', command=recognize_speech, bd=0)
         speak_btn.configure(bg='#20B2AA', activebackground='#2E8B57', activeforeground='white')
-        speak_button = canvas.create_window(Width/2, Height/1.4, window=speak_btn)
+        canvas.create_window(Width/2, Height/1.4, window=speak_btn)
+
+        repeat_btn = tk.Button(wdw, height=2, width=20, text='Repeat Sequence (-2)',
+                               font='Arial 18', fg='black', command=repeat_sequence, bd=0)
+        repeat_btn.configure(bg='#FF8C00', activebackground='#FF4500', activeforeground='white')
+        canvas.create_window(Width/2, Height/1.22, window=repeat_btn)
+
+        pause_btn = tk.Button(wdw, height=2, width=10, text='Pause',
+                              font='Arial 16', fg='black', command=toggle_pause, bd=0)
+        pause_btn.configure(bg='#B0C4DE', activebackground='#708090', activeforeground='white')
+        canvas.create_window(Width - 240, Height - 80, window=pause_btn)
+
+        stop_btn = tk.Button(wdw, height=2, width=10, text='Stop Game',
+                             font='Arial 16', fg='black', command=stop_game, bd=0)
+        stop_btn.configure(bg='#DC143C', activebackground='#8B0000', activeforeground='white')
+        canvas.create_window(Width - 120, Height - 80, window=stop_btn)
 
     runTest()
 
@@ -179,7 +242,11 @@ canvas.create_text(Width/2, Height/2.2, fill='darkblue',
 i = 0
 DIGITS = 2
 FAILURES = 0
+SCORE = 0
+paused = False
 userNumbers, generatedNumbers = [], []
+start_time = 0
+total_test_start_time = 0
 
 button_num = tk.Button(wdw, height=2, width=10, text='Numbers', 
                        font='Arial 24', fg='black', command=lambda: startTest('number'), bd=0)
