@@ -12,7 +12,7 @@ motivational_lines = [
     "Impressive! Stay focused!",
     "You're on fire today!",
     "Fantastic! You're crushing it!",
-    "Great job! Let’s keep the streak going!",
+    "Great job! Let's keep the streak going!",
     "Sharp mind! Ready for the next one?",
     "Brain training master in action!"
 ]
@@ -24,7 +24,7 @@ sequence_store = {}
 
 def startTest(mode):
     def runTest(*args):
-        global i, DIGITS, FAILURES, SCORE, paused, start_time, total_test_start_time
+        global i, DIGITS, FAILURES, SCORE, paused, start_time, total_test_start_time, consecutive_correct, current_level
         wdw.unbind('<Return>')
         canvas.delete('all')
 
@@ -39,22 +39,37 @@ def startTest(mode):
 
         if SCORE < 0:
             i = 0
-            DIGITS = 2
+            DIGITS = 3
             FAILURES = 0
             SCORE = 0
+            consecutive_correct = 0
+            current_level = 1
             runTest()
             return
 
-        DIGITS = max(3, ((SCORE // 5) + 1) * 1 + 2)
+        # New level progression logic: increase level after 2 consecutive correct answers
+        if consecutive_correct >= 2:
+            current_level += 1
+            DIGITS += 1
+            consecutive_correct = 0  # Reset counter after level increase
+        
+        # Ensure minimum digit count
+        DIGITS = max(3, DIGITS)
 
-        reverse_required = DIGITS >= 5 and (DIGITS % 2 == 1)
+        # Reverse input required after level 3 (when DIGITS >= 6)
+        reverse_required = current_level > 3
 
-        txt = '{0}-Character Sequence'.format(nums[DIGITS-3])
+        txt = '{0}-Character Sequence (Level {1})'.format(nums[min(DIGITS-3, len(nums)-1)], current_level)
         instruction = "Type the **REVERSED** sequence" if reverse_required else "Type the sequence normally"
 
         seqtxt = canvas.create_text(Width/2, Height/3.5, fill='darkblue', 
                                      font='Arial 32', text=txt, justify='c')
         canvas.create_text(Width/2, Height/3, fill='red', font='Arial 24', text=instruction)
+
+        # Display level and consecutive correct info
+        level_info = f'Level: {current_level} | Consecutive: {consecutive_correct}/2'
+        canvas.create_text(Width - 200, 80, fill='purple', 
+                          font='Arial 18 bold', text=level_info, tags='level_info')
 
         score_text = canvas.create_text(Width - 150, 50, fill='darkgreen', 
                                         font='Arial 20 bold', text=f'Score: {SCORE}', tags='score')
@@ -62,20 +77,21 @@ def startTest(mode):
         canvas.after(1200, canvas.update())
 
         if mode == 'number':
-            seq = random.sample(range(10), DIGITS)
+            seq = random.sample(range(10), min(DIGITS, 10))  # Ensure we don't exceed available digits
             while not isValidSequence(seq):
-                seq = random.sample(range(10), DIGITS)
+                seq = random.sample(range(10), min(DIGITS, 10))
             seq_digits = ''.join(str(d) for d in seq)
         else:
-            seq = random.sample(string.ascii_uppercase, DIGITS)
+            seq = random.sample(string.ascii_uppercase, min(DIGITS, 26))  # Ensure we don't exceed available letters
             while not isValidSequenceAlpha(seq):
-                seq = random.sample(string.ascii_uppercase, DIGITS)
+                seq = random.sample(string.ascii_uppercase, min(DIGITS, 26))
             seq_digits = ''.join(seq)
 
         sequence_store['current'] = seq_digits
         sequence_store['reverse'] = reverse_required
 
         canvas.delete('all')
+        # Show sequence with a slight delay between characters
         for a in range(len(seq_digits)):
             if paused:
                 return
@@ -83,9 +99,16 @@ def startTest(mode):
                                    font='Times 160', text=seq_digits[a], justify='c')
             canvas.after(1000, canvas.update())
             canvas.delete(z)
+            # Small pause between digits
+            canvas.after(200, canvas.update())
 
         label = canvas.create_text(Width/2, Height/2.3, fill='darkblue', 
                                    font='Arial 26', text='Repeat the sequence here', justify='c')
+        
+        # Show instruction again
+        instruction_reminder = "Enter REVERSED sequence" if reverse_required else "Enter sequence normally"
+        canvas.create_text(Width/2, Height/2.1, fill='red', 
+                          font='Arial 20', text=instruction_reminder, justify='c')
 
         entry_width = max(3, len(seq_digits))
         entry = tk.Text(wdw, width=entry_width, height=1, font=('Arial', 32))
@@ -106,51 +129,86 @@ def startTest(mode):
                                font='Arial 36', text='Game Over. Here are your results:', justify='c')
             canvas.create_text(Width/2, Height/2.8, fill='darkblue', 
                                font='Arial 28', text=f'Total Score: {SCORE}', justify='c')
-            canvas.create_text(Width/2, Height/2.4, fill='darkgreen', 
-                               font='Arial 24', text=f'Entries: {len(userNumbers)} | Total Time: {int(total_time)} seconds', justify='c')
-            canvas.create_text(Width/2, Height/2, fill='blue', 
+            canvas.create_text(Width/2, Height/2.5, fill='purple', 
+                               font='Arial 24', text=f'Highest Level Reached: {current_level}', justify='c')
+            canvas.create_text(Width/2, Height/2.2, fill='darkgreen', 
+                               font='Arial 20', text=f'Entries: {len(userNumbers)} | Total Time: {int(total_time)} seconds', justify='c')
+            canvas.create_text(Width/2, Height/1.9, fill='blue', 
                                font='Arial 20 italic', text=random.choice(motivational_lines), justify='c')
-            attention_level = 'High' if SCORE >= len(userNumbers) * 0.8 else 'Moderate' if SCORE >= len(userNumbers) * 0.5 else 'Needs Improvement'
-            canvas.create_text(Width/2, Height/1.8, fill='orange', 
+            
+            # Enhanced attention level calculation
+            if current_level >= 5:
+                attention_level = 'Excellent'
+            elif current_level >= 4:
+                attention_level = 'High'
+            elif current_level >= 3:
+                attention_level = 'Good'
+            elif current_level >= 2:
+                attention_level = 'Moderate'
+            else:
+                attention_level = 'Needs Improvement'
+                
+            canvas.create_text(Width/2, Height/1.6, fill='orange', 
                                font='Arial 24', text=f'Attention Level: {attention_level}', justify='c')
 
         def get_text(event=None):
-            global userNumbers, generatedNumbers, FAILURES, i, DIGITS, SCORE
+            global userNumbers, generatedNumbers, FAILURES, i, DIGITS, SCORE, consecutive_correct
             content = entry.get(1.0, "end-1c").upper().replace(" ", "")
             expected = sequence_store['current'][::-1] if sequence_store['reverse'] else sequence_store['current']
             userNumbers.append(content)
-            generatedNumbers.append(sequence_store['current'] if not sequence_store['reverse'] else sequence_store['current'] + " (reversed)")
+            generatedNumbers.append(sequence_store['current'] + (" (reversed)" if sequence_store['reverse'] else " (normal)"))
 
             canvas.delete("all")
 
             if content == expected:
                 SCORE += 1
+                consecutive_correct += 1  # Increment consecutive correct counter
                 canvas.create_text(Width/2, Height/2.3, fill='darkblue', 
                                    font='Arial 26', text='Correct! Continue...', justify='c')
+                
+                # Show progress towards next level
+                if consecutive_correct < 2:
+                    progress_text = f"Consecutive correct: {consecutive_correct}/2 - Keep going!"
+                    canvas.create_text(Width/2, Height/2, fill='orange', 
+                                      font='Arial 18', text=progress_text)
+                else:
+                    level_up_text = f"Level up! Moving to Level {current_level + 1}"
+                    canvas.create_text(Width/2, Height/2, fill='purple', 
+                                      font='Arial 20 bold', text=level_up_text)
+                
                 motivation = random.choice(motivational_lines)
                 canvas.create_text(Width/2, Height/1.6, fill='green', 
                                    font='Arial 20 italic', text=motivation)
-                canvas.after(1500, delete)
+                canvas.after(2000, delete)  # Slightly longer delay to show level progress
             else:
                 SCORE -= 2
+                consecutive_correct = 0  # Reset consecutive counter on wrong answer
                 canvas.create_text(Width/2, Height/2.3, fill='darkblue', 
-                                   font='Arial 26', text='Try again!', justify='c')
+                                   font='Arial 26', text='Incorrect! Try again!', justify='c')
+                canvas.create_text(Width/2, Height/2, fill='red', 
+                                  font='Arial 18', text='Consecutive progress reset', justify='c')
                 FAILURES += 1
                 if FAILURES < 3:
                     i -= 1
-                    canvas.after(1200, delete)
+                    canvas.after(1500, delete)
                 else:
                     stop_game()
 
         def repeat_sequence():
-            global SCORE
+            global SCORE, consecutive_correct
             SCORE -= 2
+            consecutive_correct = 0  # Reset consecutive counter when using repeat
             canvas.delete('all')
+            canvas.create_text(Width/2, Height/3, fill='orange', 
+                              font='Arial 20', text='Repeating sequence (consecutive progress reset)', justify='c')
+            canvas.after(1000, canvas.update())
+            
             for a in range(len(sequence_store['current'])):
                 z = canvas.create_text(Width/2, Height/2, fill='darkblue', 
                                        font='Times 160', text=sequence_store['current'][a], justify='c')
                 canvas.after(1000, canvas.update())
                 canvas.delete(z)
+                canvas.after(200, canvas.update())
             runTest()
 
         def recognize_speech():
@@ -189,17 +247,17 @@ def startTest(mode):
         button_continue = tk.Button(wdw, height=2, width=10, text='Continue', 
                                     font='Arial 20', fg='black', command=get_text, bd=0)
         button_continue.configure(bg='#4682B4', activebackground='#36648B', activeforeground='white')
-        canvas.create_window(Width/2, Height/1.6, window=button_continue)
+        canvas.create_window(Width/2, Height/1.5, window=button_continue)
 
         speak_btn = tk.Button(wdw, height=2, width=10, text='Speak',
                               font='Arial 20', fg='black', command=recognize_speech, bd=0)
         speak_btn.configure(bg='#20B2AA', activebackground='#2E8B57', activeforeground='white')
-        canvas.create_window(Width/2, Height/1.4, window=speak_btn)
+        canvas.create_window(Width/2, Height/1.35, window=speak_btn)
 
-        repeat_btn = tk.Button(wdw, height=2, width=20, text='Repeat Sequence (-2)',
-                               font='Arial 18', fg='black', command=repeat_sequence, bd=0)
+        repeat_btn = tk.Button(wdw, height=2, width=25, text='Repeat Sequence (-2 & Reset)',
+                               font='Arial 16', fg='black', command=repeat_sequence, bd=0)
         repeat_btn.configure(bg='#FF8C00', activebackground='#FF4500', activeforeground='white')
-        canvas.create_window(Width/2, Height/1.22, window=repeat_btn)
+        canvas.create_window(Width/2, Height/1.2, window=repeat_btn)
 
         pause_btn = tk.Button(wdw, height=2, width=10, text='Pause',
                               font='Arial 16', fg='black', command=toggle_pause, bd=0)
@@ -214,19 +272,23 @@ def startTest(mode):
     runTest()
 
 def isValidSequence(seq):
+    if len(seq) <= 1:
+        return True
     for x in range(len(seq)-1):
         if abs(seq[x] - seq[x+1]) == 1:
             return False
     return True
 
 def isValidSequenceAlpha(seq):
+    if len(seq) <= 1:
+        return True
     for x in range(len(seq)-1):
         if abs(ord(seq[x]) - ord(seq[x+1])) == 1:
             return False
     return True
 
 wdw = tk.Tk()
-wdw.title('Digit Span Test')
+wdw.title('Enhanced Digit Span Test')
 Width = wdw.winfo_screenwidth()
 Height = wdw.winfo_screenheight()
 wdw.geometry("%dx%d" % (Width, Height))
@@ -236,14 +298,23 @@ wdw.state('zoomed')
 
 canvas.create_text(Width/2, Height/4.5, fill='darkblue', 
                    font='Arial 52', text=title, justify='c')
-canvas.create_text(Width/2, Height/2.2, fill='darkblue', 
-                   font='Arial 36', text=docs, justify='c')
+canvas.create_text(Width/2, Height/2.4, fill='darkblue', 
+                   font='Arial 28', text='New Features:', justify='c')
+canvas.create_text(Width/2, Height/2.1, fill='darkgreen', 
+                   font='Arial 20', text='• Level up after 2 consecutive correct answers', justify='c')
+canvas.create_text(Width/2, Height/1.95, fill='darkgreen', 
+                   font='Arial 20', text='• Reverse input required after Level 3', justify='c')
+canvas.create_text(Width/2, Height/1.8, fill='darkblue', 
+                   font='Arial 24', text=docs, justify='c')
 
+# Initialize new global variables
 i = 0
-DIGITS = 2
+DIGITS = 3  # Start with 3 digits
 FAILURES = 0
 SCORE = 0
 paused = False
+consecutive_correct = 0  # Track consecutive correct answers
+current_level = 1  # Track current level
 userNumbers, generatedNumbers = [], []
 start_time = 0
 total_test_start_time = 0
